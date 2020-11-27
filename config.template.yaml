@@ -1,0 +1,11 @@
+
+iot:
+  host: iot.example.local
+  port: 1883
+
+kasa:
+  config:
+    polling_interval_sec: 10
+  devices:
+    - host: 192.168.2.50
+      device_id: smart_plug
