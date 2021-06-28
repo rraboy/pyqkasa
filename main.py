@@ -32,7 +32,7 @@ def on_message(client, userdata, msg):
             devices[device_id].on_message(msg.payload.decode('utf-8'))
 
 
-def sched():
+def on_sched():
     global devices
 
     for device_id in devices:
@@ -55,11 +55,13 @@ def main():
     mqtt_client.on_message = on_message
 
     for e in config['kasa']['devices']:
-        devices[e['device_id']] = PlugDevice(e, mqtt_client)
-
+        if e['type'] == 'plug':
+            devices[e['device_id']] = PlugDevice(e, mqtt_client)
+        else:
+            raise Exception("invalid device type '{}' of device '{}'".format(e['type'], e['device_id']))
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(sched, 'interval', seconds=config['kasa']['config']['polling_interval_sec'])
+    scheduler.add_job(on_sched, 'interval', seconds=config['kasa']['config']['polling_interval_sec'])
     scheduler.start()
 
     mqtt_client.connect(config['iot']['host'], config['iot']['port'], 60)
