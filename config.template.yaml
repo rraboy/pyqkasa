@@ -9,3 +9,4 @@ kasa:
   devices:
     - host: 192.168.2.50
       device_id: smart_plug
+      type: plug
