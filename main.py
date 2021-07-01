@@ -1,11 +1,8 @@
 #!/usr/bin/python3
 
-import asyncio
 import logging
 import logging.config
-import os
 import sys
-import time
 
 import paho.mqtt.client as mqtt
 import yaml
@@ -13,12 +10,14 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 from bulb import BulbDevice
 from plug import PlugDevice
+from util import current_milli_time
 
 mqtt_client = None
 config = {}
 devices = {}
 
 log = logging.getLogger("main")
+tick  = current_milli_time()
 
 def on_connect(mqtt_client, userdata, flags, rc):
     log.info(f"Connected with result code: {str(rc)}")
@@ -48,9 +47,21 @@ def on_message(client, userdata, msg):
 
 def on_sched():
     global devices
+    global tick
 
     for device_id in devices:
         devices[device_id].update()
+
+    tick  = current_milli_time()
+
+def on_checker():
+    global tick
+    
+    log.debug(f"last tick: {tick}, current tick: {current_milli_time()}")
+    if tick > (current_milli_time() + 5 * 60 * 1000):
+        # workaround if the main scheduler got stuck
+        log.error("job scheduler got stuck. exiting...")
+        sys.exit(1)
 
 def parse_config():
     global config
@@ -60,6 +71,7 @@ def parse_config():
         config = yaml.load(file, Loader=yaml.FullLoader)
 
     log.info("configuration read!")
+
     
 def main():
     global devices
@@ -82,6 +94,7 @@ def main():
 
     scheduler = BackgroundScheduler()
     scheduler.add_job(on_sched, 'interval', seconds=config['kasa']['config']['polling_interval_sec'], misfire_grace_time=5)
+    scheduler.add_job(on_checker, 'interval', minutes=1)
     scheduler.start()
 
     mqtt_client.connect(config['iot']['host'], config['iot']['port'], 60)
