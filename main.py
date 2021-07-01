@@ -1,18 +1,18 @@
 #!/usr/bin/python3
 
-import paho.mqtt.client as mqtt
 import asyncio
-import time
-import os
-import sys
-import yaml
 import logging
 import logging.config
+import os
+import sys
+import time
 
-from datetime import datetime
+import paho.mqtt.client as mqtt
+import yaml
 from apscheduler.schedulers.background import BackgroundScheduler
-from kasa import SmartPlug
-from device import PlugDevice
+
+from bulb import BulbDevice
+from plug import PlugDevice
 
 mqtt_client = None
 config = {}
@@ -75,11 +75,13 @@ def main():
     for e in config['kasa']['devices']:
         if e['type'] == 'plug':
             devices[e['device_id']] = PlugDevice(e, mqtt_client)
+        elif e['type'] == 'bulb':
+            devices[e['device_id']] = BulbDevice(e, mqtt_client)
         else:
             raise Exception("invalid device type '{}' of device '{}'".format(e['type'], e['device_id']))
 
     scheduler = BackgroundScheduler()
-    scheduler.add_job(on_sched, 'interval', seconds=config['kasa']['config']['polling_interval_sec'])
+    scheduler.add_job(on_sched, 'interval', seconds=config['kasa']['config']['polling_interval_sec'], misfire_grace_time=5)
     scheduler.start()
 
     mqtt_client.connect(config['iot']['host'], config['iot']['port'], 60)
