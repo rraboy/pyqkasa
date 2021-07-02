@@ -2,6 +2,7 @@
 
 import logging
 import logging.config
+from os import wait
 import sys
 
 import paho.mqtt.client as mqtt
@@ -12,6 +13,7 @@ from bulb import BulbDevice
 from plug import PlugDevice
 from util import current_milli_time
 
+scheduler = None
 mqtt_client = None
 config = {}
 devices = {}
@@ -52,16 +54,20 @@ def on_sched():
     for device_id in devices:
         devices[device_id].update()
 
-    tick  = current_milli_time()
+    tick  = current_milli_time() + (60 * 1000)
 
 def on_checker():
     global tick
-    
+    global scheduler
+
     log.debug(f"last tick: {tick}, current tick: {current_milli_time()}")
-    if tick > (current_milli_time() + 5 * 60 * 1000):
+    if current_milli_time() > tick:
         # workaround if the main scheduler got stuck
         log.error("job scheduler got stuck. exiting...")
-        sys.exit(1)
+        try:
+            scheduler.shutdown(wait=False)
+        finally:
+            sys.exit(1)
 
 def parse_config():
     global config
@@ -76,6 +82,7 @@ def parse_config():
 def main():
     global devices
     global mqtt_client
+    global scheduler
 
     logging.config.fileConfig(fname='logging.ini', disable_existing_loggers=False)
 

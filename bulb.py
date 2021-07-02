@@ -22,54 +22,67 @@ class BulbDevice:
 
     def publish_val(self, name, value):
         topic = f"{self.device_id}/values/{name}"
-        self.mqtt.publish(topic, str(value), 1)
+        self.mqtt.publish(topic, str(value), 0)
         log.debug('Topic: %s, Value: %s', topic, value)
+
+    def publish_err(self, name, value):
+        topic = f"{self.device_id}/errors/{name}"
+        self.mqtt.publish(topic, str(value), 0)
+        log.debug('Topic: %s, Error: %s', topic, value)
 
     def on_command(self, cmd, msg):
         value = msg.strip().lower()
         self.update()
 
-        if cmd == 'power_state':
-            if is_true(value):
-                asyncio.run(self.bulb.turn_on())
+        try:
+            if cmd == 'power_state':
+                if is_true(value):
+                    asyncio.run(self.bulb.turn_on())
+                    self.update()
+                    log.debug(f"Turning on {self.device_id}")
+                elif is_false(value):
+                    asyncio.run(self.bulb.turn_off())
+                    self.update()
+                    log.debug(f"Turning off {self.device_id}")
+            elif cmd == 'color_temperature':
+                color_temperature = int(msg)
+                asyncio.run(self.bulb.set_color_temp(color_temperature))
+                log.debug(f"Setting color temperature to {color_temperature} for {self.device_id}")
+            elif cmd == 'brightness':
+                brightness = int(msg)
+                asyncio.run(self.bulb.set_brightness(brightness))
+                log.debug(f"Setting brightness to {brightness} for {self.device_id}")
+            elif cmd == 'hsv':
+                h, s, v = msg.split(',')
+                asyncio.run(self.bulb.set_hsv(int(h), int(s), int(v)))
+                log.debug(f"Setting hsv to {h},{s},{v} for {self.device_id}")
+            elif cmd == 'sync':
                 self.update()
-                log.debug(f"Turning on {self.device_id}")
-            elif is_false(value):
-                asyncio.run(self.bulb.turn_off())
-                self.update()
-                log.debug(f"Turning off {self.device_id}")
-        elif cmd == 'temperature':
-            temperature = int(msg)
-            asyncio.run(self.bulb.set_color_temp(temperature))
-            log.debug(f"Setting temperature to {temperature} for {self.device_id}")
-        elif cmd == 'brightness':
-            brightness = int(msg)
-            asyncio.run(self.bulb.set_brightness(brightness))
-            log.debug(f"Setting brightness to {brightness} for {self.device_id}")
-        elif cmd == 'hsv':
-            h, s, v = msg.split(',')
-            asyncio.run(self.bulb.set_hsv(int(h), int(s), int(v)))
-            log.debug(f"Setting hsv to {h},{s},{v} for {self.device_id}")
-        elif cmd == 'sync':
-            self.update()
+                
+        except Exception as e:
+            self.publish_err('command', e.__str__())
 
     async def _update(self):
-        await self.bulb.update()
-        sysinfo = await self.bulb.get_sys_info()
-        log.debug(f"sysinfo {json.dumps(sysinfo, indent=4)}")
-        self.publish_val('power_state',  'yes' if sysinfo['light_state']['on_off'] else 'no')
-        self.publish_val('sys_info', json.dumps(sysinfo))
-        self.publish_val('rssi', sysinfo['rssi'])
+        try:
+            await self.bulb.update()
+            sysinfo = await self.bulb.get_sys_info()
+            log.debug(f"sysinfo {json.dumps(sysinfo, indent=4)}")
+            self.publish_val('power_state',  'yes' if sysinfo['light_state']['on_off'] else 'no')
+            self.publish_val('sys_info', json.dumps(sysinfo))
+            self.publish_val('rssi', sysinfo['rssi'])
 
-        light_state = sysinfo['light_state']
-        if "dft_on_state" in light_state:
-            light_state = light_state['dft_on_state']
+            light_state = sysinfo['light_state']
+            if "dft_on_state" in light_state:
+                light_state = light_state['dft_on_state']
 
-        self.publish_val('temperature', light_state['color_temp'])
-        self.publish_val('brightness', light_state['brightness'])
-        self.publish_val('hue', light_state['hue'])
-        self.publish_val('saturation', light_state['saturation'])
+            self.publish_val('color_temperature', light_state['color_temp'])
+            self.publish_val('brightness', light_state['brightness'])
+            self.publish_val('hue', light_state['hue'])
+            self.publish_val('saturation', light_state['saturation'])
 
-        pw = await self.bulb.get_emeter_realtime()
-        self.publish_val('power_mw', pw['power_mw'])
-        self.publish_val('power_total_wh', pw['total_wh'])
+            pw = await self.bulb.get_emeter_realtime()
+            self.publish_val('power_mw', pw['power_mw'])
+            self.publish_val('power_total_wh', pw['total_wh'])
+
+        except Exception as e:
+            self.publish_err('update', e.__str__())
