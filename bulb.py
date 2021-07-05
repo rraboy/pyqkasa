@@ -30,6 +30,17 @@ class BulbDevice:
         self.mqtt.publish(topic, str(value), 0)
         log.debug('Topic: %s, Error: %s', topic, value)
 
+    def public_config(self, type, valueJson):
+        topic = f"{self.device_id}/config/{type}"
+        self.mqtt.publish(topic, valueJson, 0)
+        log.debug('Topic: %s, Error: %s', topic, valueJson)
+    
+    def on_config_get(self):
+        self.update()
+
+    def on_config_update(self, partialWantJson):
+        pass
+
     def on_command(self, cmd, msg):
         value = msg.strip().lower()
         self.update()
@@ -65,15 +76,17 @@ class BulbDevice:
     async def _update(self):
         try:
             await self.bulb.update()
+
             sysinfo = await self.bulb.get_sys_info()
-            log.debug(f"sysinfo {json.dumps(sysinfo, indent=4)}")
+
+            # publish simple values
             self.publish_val('power_state',  'yes' if sysinfo['light_state']['on_off'] else 'no')
-            self.publish_val('sys_info', json.dumps(sysinfo))
             self.publish_val('rssi', sysinfo['rssi'])
 
             light_state = sysinfo['light_state']
             if "dft_on_state" in light_state:
                 light_state = light_state['dft_on_state']
+                light_state['on_off'] = 0
 
             self.publish_val('color_temperature', light_state['color_temp'])
             self.publish_val('brightness', light_state['brightness'])
@@ -83,6 +96,16 @@ class BulbDevice:
             pw = await self.bulb.get_emeter_realtime()
             self.publish_val('power_mw', pw['power_mw'])
             self.publish_val('power_total_wh', pw['total_wh'])
+
+            # construct config
+            del sysinfo['light_state']
+            config = {}
+            config['device'] = sysinfo
+            config['state'] = light_state
+            configJsonStr = json.dumps(config, indent=4)
+
+            self.public_config('live', configJsonStr)
+            log.debug(f"config: {configJsonStr}")
 
         except Exception as e:
             self.publish_err('update', e.__str__())

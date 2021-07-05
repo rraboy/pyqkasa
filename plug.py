@@ -24,6 +24,12 @@ class PlugDevice:
         self.mqtt.publish(topic, str(value), 1)
         log.debug('Topic: %s, Value: %s', topic, value)
 
+    def on_config_get(self):
+        pass
+
+    def on_config_update(self, dataJson):
+        pass
+
     def on_command(self, cmd, msg):
         value = msg.strip().lower()
 

@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import json
 import logging
 import logging.config
 from os import wait
@@ -33,19 +34,37 @@ def on_connect(mqtt_client, userdata, flags, rc):
 def on_message(client, userdata, msg):
     log.debug(f"{msg.topic}: {str(msg.payload)}")
 
-    ss = msg.topic.split('/', 3)
-    if len(ss) == 3:
-        if ss[1] == 'command':
+    try:
+        ss = msg.topic.split('/', 3)
+        if len(ss) == 3:
             re_device_id = ss[0]
-            re_cmd = ss[2]
-            re_msg = msg.payload.decode('utf-8').strip()
-            log.debug(f"{re_device_id}: Executing command {re_cmd}: {re_msg}")
-            for device_id in devices:
-                if device_id == re_device_id:
-                    devices[device_id].on_command(re_cmd, re_msg)
-            return
+            device = None
+            if re_device_id in devices:
+                device = devices[re_device_id]
 
-    log.warn(f"invalid topic: {msg.topic}")
+            if device == None:
+                log.warn(f"unknown device: {re_device_id}")
+
+            elif ss[1] == 'command':
+                re_cmd = ss[2]
+                re_msg = msg.payload.decode('utf-8').strip()
+                log.debug(f"{re_device_id}: Executing command {re_cmd}: {re_msg}")
+                device.on_command(re_cmd, re_msg)
+
+            elif ss[1] == 'config':
+                if ss[2] == 'get':
+                    device.on_config_get()
+                elif ss[2] == 'update':
+                    re_msg = msg.payload.decode('utf-8')
+                    re_msg_json = json.loads(re_msg)
+                    device.on_config_update(re_msg_json)
+
+        else:
+            log.warn(f"invalid topic: {msg.topic}")
+
+    except Exception:
+        log.exception(f"unable to process message of topic: {msg.topic}")
+        
 
 def on_sched():
     global devices
